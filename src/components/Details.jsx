@@ -1,22 +1,51 @@
-import React from 'react'
+import React, { useState, useRef } from 'react'
 import {  
     Box,
     Button,
     Stack,
-    TextField
+    TextField,
+    Alert
 } from '@mui/material'
 import Title from './Title'
 import Paragraph from './Paragraph'
+import { submitContactForm } from '../services/api'
 
 const Details = () => {
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [success, setSuccess] = useState(false);
+    const formRef = useRef(null);
 
-    const handleSubmit = (event) => {
+    const handleSubmit = async (event) => {
         event.preventDefault();
-        const data = new FormData(event.currentTarget);
-        console.log({
-            email: data.get('email'),
-            phone: data.get('phone'),
-        });
+        setError('');
+        setSuccess(false);
+        setLoading(true);
+
+        try {
+            const data = new FormData(event.currentTarget);
+            const formData = {
+                email: data.get('email'),
+                phone: data.get('phone'),
+            };
+
+            const response = await submitContactForm(formData);
+            console.log('Form submitted successfully:', response);
+            
+            // Clear form and show success message
+            if (formRef.current) {
+                formRef.current.reset();
+            }
+            setSuccess(true);
+            
+            // Hide success message after 5 seconds
+            setTimeout(() => setSuccess(false), 5000);
+        } catch (err) {
+            console.error('Form submission error:', err);
+            setError(err.message || 'Failed to submit form. Please try again.');
+        } finally {
+            setLoading(false);
+        }
     }
 
 
@@ -48,6 +77,7 @@ const Details = () => {
             />
 
             <Box 
+            ref={formRef}
             component="form" 
             noValidate 
             onSubmit={handleSubmit} 
@@ -55,6 +85,16 @@ const Details = () => {
                 mt: 1,
                 py: 2
             }}>
+                {error && (
+                    <Alert severity="error" sx={{ mb: 2 }}>
+                        {error}
+                    </Alert>
+                )}
+                {success && (
+                    <Alert severity="success" sx={{ mb: 2 }}>
+                        Thank you! We've received your information and will contact you soon.
+                    </Alert>
+                )}
                 <TextField
                     margin="normal"
                     required
@@ -64,6 +104,7 @@ const Details = () => {
                     name="email"
                     autoComplete="email"
                     autoFocus
+                    disabled={loading}
                 />
                 <TextField
                     margin="normal"
@@ -74,12 +115,14 @@ const Details = () => {
                     type="phone"
                     id="phone"
                     autoComplete="current-phone"
+                    disabled={loading}
                 />
                 <Button 
                 variant="contained" 
                 fullWidth
                 type="submit"
                 size="medium"
+                disabled={loading}
                 sx= {{ 
                     fontSize: '0.9rem',
                     textTransform: 'capitalize', 
@@ -90,10 +133,14 @@ const Details = () => {
                     backgroundColor: '#14192d',
                     "&:hover": {
                         backgroundColor: '#1e2a5a',
+                    },
+                    "&:disabled": {
+                        backgroundColor: '#9ca3af',
+                        color: '#fff',
                     }
                 }}
                 >
-                    send
+                    {loading ? 'Sending...' : 'send'}
                 </Button>
             </Box>
         </Stack>
