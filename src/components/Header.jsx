@@ -48,7 +48,7 @@ const Header = () => {
                     color: '#fff',
                 }}
                 >
-                    We'll build house of your dream
+                    We'll Build house of your dream
                 </Typography>
 
                 <Typography
