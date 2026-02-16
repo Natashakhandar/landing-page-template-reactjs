@@ -35,13 +35,13 @@ const Details = () => {
         setMessage(error.message || "Error submitting form");
       } else {
         setMessageType("success");
-        setMessage("Submitted successfully 🎉");
+        setMessage("Submitted successfully ");
         form.reset();
       }
     } catch (err) {
       console.error("Catch error:", err);
       setMessageType("success");
-      setMessage("Submitted successfully 🎉");
+      setMessage("Submitted successfully");
       form.reset();
     } finally {
       setLoading(false);
