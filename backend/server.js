@@ -1,165 +1,113 @@
-import express from 'express';
-import cors from 'cors';
-import mysql from 'mysql2/promise';
-import dotenv from 'dotenv';
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import { createClient } from "@supabase/supabase-js";
 
-dotenv.config({ path: '../.env.local' });
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5002;
 
-// Middleware
-const corsOptions = {
-  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003', 'http://localhost:3004', 'http://localhost:3005', 'http://localhost:3006'],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-};
+/* -------------------- SUPABASE CONFIG -------------------- */
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
 
-app.use(cors(corsOptions));
+/* -------------------- MIDDLEWARE -------------------- */
+app.use(
+  cors({
+    origin: "*", // allow CloudFront + localhost
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Content-Type"]
+  })
+);
+
 app.use(express.json());
 
-// MySQL Connection Pool
-let pool = null;
-try {
-  pool = mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASS || '',
-    database: process.env.DB_NAME || 'landing_db',
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-  });
-} catch (error) {
-  console.error('Failed to create connection pool:', error);
-}
-
-// Root endpoint
-app.get('/', (req, res) => {
-  res.json({ 
-    message: 'Landing Page Backend API',
-    status: 'running',
+/* -------------------- ROOT -------------------- */
+app.get("/", (req, res) => {
+  res.json({
+    message: "Landing Page Backend API",
+    status: "running",
     endpoints: {
-      health: '/health',
-      submitContact: 'POST /api/contacts',
-      getContacts: 'GET /api/contacts'
+      health: "/health",
+      submitContact: "POST /api/contacts",
+      getContacts: "GET /api/contacts"
     }
   });
 });
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'Backend is running' });
+/* -------------------- HEALTH -------------------- */
+app.get("/health", (req, res) => {
+  res.json({ status: "Backend is running 🚀" });
 });
 
-// Initialize database endpoint
-app.get('/api/init-db', async (req, res) => {
+/* -------------------- POST CONTACT -------------------- */
+app.post("/api/contacts", async (req, res) => {
   try {
-    const connection = await pool.getConnection();
-    
-    // Create contacts table if it doesn't exist
-    const createTableQuery = `
-      CREATE TABLE IF NOT EXISTS contacts (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        email VARCHAR(255) NOT NULL,
-        phone VARCHAR(20) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `;
-    
-    await connection.execute(createTableQuery);
-    connection.release();
-    
-    res.json({
-      success: true,
-      message: 'Database initialized successfully'
-    });
-  } catch (error) {
-    console.error('Error initializing database:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
+    console.log("Incoming body:", req.body);
 
-// Submit contact endpoint
-app.post('/api/contacts', async (req, res) => {
-  console.log('Received POST request to /api/contacts');
-  console.log('Request body:', req.body);
-  
-  try {
     const { email, phone } = req.body;
 
     if (!email || !phone) {
       return res.status(400).json({
         success: false,
-        error: 'Email and phone are required'
+        error: "Email and phone are required"
       });
     }
 
-    if (!pool) {
-      console.error('MySQL pool is not initialized');
+    const { data, error } = await supabase
+      .from("contacts")
+      .insert([{ email, phone }])
+      .select();
+
+    if (error) {
+      console.error("Supabase error:", error);
       return res.status(500).json({
         success: false,
-        error: 'Database connection not available. Make sure MySQL is running.'
+        error: error.message
       });
     }
 
-    console.log('Getting database connection...');
-    const connection = await pool.getConnection();
-    console.log('Connection obtained, executing query...');
-    
-    const query = 'INSERT INTO contacts (email, phone, created_at) VALUES (?, ?, NOW())';
-    const [result] = await connection.execute(query, [email, phone]);
-    
-    connection.release();
-    console.log('Contact saved with ID:', result.insertId);
-
-    const responseData = {
+    res.status(200).json({
       success: true,
-      message: 'Contact submitted successfully',
-      data: {
-        id: result.insertId,
-        email,
-        phone
-      }
-    };
-    
-    console.log('Sending response:', responseData);
-    res.status(200).json(responseData);
-  } catch (error) {
-    console.error('Error submitting contact:', error.message);
-    console.error('Full error:', error);
+      message: "Contact saved successfully",
+      data: data[0]
+    });
+  } catch (err) {
+    console.error("FULL ERROR:", err);
     res.status(500).json({
       success: false,
-      error: error.message || 'An error occurred while submitting the contact'
+      error: err.message || "Server error"
     });
   }
 });
 
-// Get all contacts endpoint
-app.get('/api/contacts', async (req, res) => {
+/* -------------------- GET CONTACTS -------------------- */
+app.get("/api/contacts", async (req, res) => {
   try {
-    const connection = await pool.getConnection();
-    const [rows] = await connection.execute('SELECT * FROM contacts ORDER BY created_at DESC');
-    connection.release();
+    const { data, error } = await supabase
+      .from("contacts")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
 
     res.json({
       success: true,
-      data: rows
+      data
     });
-  } catch (error) {
-    console.error('Error fetching contacts:', error);
+  } catch (err) {
+    console.error("Fetch error:", err);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: err.message
     });
   }
 });
 
-// Start server
+/* -------------------- START SERVER -------------------- */
 app.listen(PORT, () => {
   console.log(`Backend server running on http://localhost:${PORT}`);
 });
